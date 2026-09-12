@@ -254,6 +254,7 @@ describe("core/packages", () => {
 				NpmPackageManager.PNPM,
 				NpmPackageManager.YARN,
 				NpmPackageManager.BUN,
+				NpmPackageManager.NUB,
 			]);
 		});
 	});
@@ -332,6 +333,17 @@ describe("core/packages", () => {
 			});
 		});
 
+		it("recognizes Nub lockfiles", () => {
+			expect(
+				detectLockfiles("/project", (absolutePath) =>
+					absolutePath.endsWith("nub.lock"),
+				),
+			).toEqual({
+				manager: NpmPackageManager.NUB,
+				lockfile: "nub.lock",
+			});
+		});
+
 		it("returns undefined when no lockfile matches", () => {
 			expect(detectLockfiles("/project", () => false)).toBeUndefined();
 		});
@@ -376,15 +388,14 @@ describe("core/packages", () => {
 				path.join(os.tmpdir(), "packages-package-json-"),
 			);
 			createdDirs.push(projectDir);
-
 			fs.writeFileSync(
 				path.join(projectDir, "package.json"),
-				JSON.stringify({ packageManager: "pnpm@10.0.0" }),
+				JSON.stringify({ packageManager: "nub@0.2.0" }),
 				"utf8",
 			);
 
 			await expect(detectManifest(projectDir)).resolves.toBe(
-				NpmPackageManager.PNPM,
+				NpmPackageManager.NUB,
 			);
 		});
 
@@ -475,6 +486,17 @@ describe("core/packages", () => {
 				pmInstall: "pnpm install --ignore-scripts --frozen-lockfile",
 				pmPublish:
 					"pnpm -r publish --provenance --access public --no-git-checks",
+			});
+		});
+
+		it("returns Nub interpolation bindings", () => {
+			expect(
+				packageManagerBindings(RegistryEcosystem.NPM, NpmPackageManager.NUB),
+			).toEqual({
+				pmRun: "nub run",
+				pmExec: "nub exec",
+				pmInstall: "nub install --ignore-scripts --frozen-lockfile",
+				pmPublish: "nub publish --access public",
 			});
 		});
 	});
@@ -752,6 +774,19 @@ describe("core/packages", () => {
 					executable: "bun",
 					args: ["add", "--ignore-scripts", "zod"],
 					display: "bun add --ignore-scripts zod",
+				},
+			]);
+			expect(
+				buildPackageInstallCommands(
+					RegistryEcosystem.NPM,
+					NpmPackageManager.NUB,
+					{ runtime: ["zod"] },
+				),
+			).toEqual([
+				{
+					executable: "nub",
+					args: ["add", "--ignore-scripts", "zod"],
+					display: "nub add --ignore-scripts zod",
 				},
 			]);
 		});
