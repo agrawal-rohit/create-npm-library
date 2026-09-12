@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readJsonFileAsync } from "./fs";
 import type { PromptHost } from "./handlers";
 import {
 	type CompiledItem,
@@ -11,6 +12,16 @@ import {
 	type RegistryEcosystemDependencies,
 } from "./schema";
 import { isEscapingRelativePath } from "./urls";
+
+/**
+ * Require an absolute project directory for filesystem-based detection.
+ * @param projectDir - Project root to validate.
+ * @throws Error when `projectDir` is relative.
+ */
+function assertAbsoluteProjectDirectory(projectDir: string): void {
+	if (!path.isAbsolute(projectDir))
+		throw new Error("Project directory must be an absolute path.");
+}
 
 /** Pack `when` key and Mustache key for the selected package manager. */
 export const PACKAGE_MANAGER_KEY = "packageManager";
@@ -29,6 +40,7 @@ export enum NpmPackageManager {
 	PNPM = "pnpm",
 	YARN = "yarn",
 	BUN = "bun",
+	NUB = "nub",
 }
 
 /** Package manager selected for a registry ecosystem. Add a manager enum to this union when introducing a new language. */
@@ -58,14 +70,53 @@ export interface PackageManagerSpec {
 	install: Record<RegistryDependencyKind, readonly string[]>;
 }
 
-/** Package managers keyed by ecosystem. */
+/** Result of detecting one package manager from an ecosystem lockfile. */
+export interface PackageManagerLockfileMatch {
+	manager: RegistryPackageManager;
+	lockfile: string;
+}
+
+/**
+ * Ecosystem adapter for package manager discovery.
+ * Ecosystems (npm, and in the future python, rust, etc.) implement both operations.
+ */
+export interface EcosystemPackageManagerAdapter {
+	/**
+	 * Check the ecosystem's known lockfiles.
+	 * @param projectDir - Absolute project root.
+	 * @param managers - Manager specs owned by the ecosystem.
+	 * @param pathExists - Path existence checker. Defaults to `fs.existsSync`.
+	 * @returns Matching manager and lockfile when exactly one manager matches.
+	 */
+	detectFromLockfiles(
+		projectDir: string,
+		managers: readonly PackageManagerSpec[],
+		pathExists?: (absolutePath: string) => boolean,
+	): PackageManagerLockfileMatch | undefined;
+	/**
+	 * Check the ecosystem's project manifest for a manager declaration.
+	 * For npm this reads `package.json#packageManager`; another ecosystem may
+	 * inspect `pyproject.toml`, `Cargo.toml`, or another manifest instead.
+	 * @param projectDir - Absolute project root.
+	 * @param managers - Manager specs owned by the ecosystem.
+	 * @param pathExists - Path existence checker. Defaults to `fs.existsSync`.
+	 * @returns Declared manager when known and valid, or undefined.
+	 */
+	detectFromManifest(
+		projectDir: string,
+		managers: readonly PackageManagerSpec[],
+		pathExists?: (absolutePath: string) => boolean,
+	): Promise<RegistryPackageManager | undefined>;
+}
+
+/** Package manager specs keyed by ecosystem. */
 export const ecosystemManagers = {
 	// First manager in each list is the CLI fallback when the user skips the prompt.
 	[RegistryEcosystem.NPM]: [
 		{
 			manager: NpmPackageManager.NPM,
 			label: "npm",
-			lockfiles: ["package-lock.json"],
+			lockfiles: ["package-lock.json", "npm-shrinkwrap.json"],
 			install: {
 				[RegistryDependencyKind.RUNTIME]: ["install", "--ignore-scripts"],
 				[RegistryDependencyKind.DEV]: ["install", "--ignore-scripts", "-D"],
@@ -113,8 +164,7 @@ export const ecosystemManagers = {
 		{
 			manager: NpmPackageManager.BUN,
 			label: "Bun",
-			// bun.lock is the current text lockfile; bun.lockb is the older binary format.
-			lockfiles: ["bun.lock", "bun.lockb"],
+			lockfiles: ["bun.lock"],
 			install: {
 				[RegistryDependencyKind.RUNTIME]: ["add", "--ignore-scripts"],
 				[RegistryDependencyKind.DEV]: ["add", "--ignore-scripts", "-D"],
@@ -126,8 +176,38 @@ export const ecosystemManagers = {
 				pmPublish: "bun publish --access public",
 			},
 		},
+		{
+			manager: NpmPackageManager.NUB,
+			label: "Nub",
+			lockfiles: ["nub.lock"],
+			install: {
+				[RegistryDependencyKind.RUNTIME]: ["add", "--ignore-scripts"],
+				[RegistryDependencyKind.DEV]: ["add", "--ignore-scripts", "-D"],
+			},
+			bindings: {
+				pmRun: "nub run",
+				pmExec: "nub exec",
+				pmInstall: "nub install --ignore-scripts --frozen-lockfile",
+				pmPublish: "nub publish --access public",
+			},
+		},
 	],
 } satisfies Record<RegistryEcosystem, readonly PackageManagerSpec[]>;
+
+/**
+ * Find a package-manager specification for an ecosystem.
+ * @param ecosystem - Registry ecosystem that owns the manager.
+ * @param candidateManager - Candidate manager id.
+ * @returns Matching specification, or undefined when the manager is unsupported.
+ */
+function findPackageManagerSpec(
+	ecosystem: RegistryEcosystem,
+	candidateManager: string,
+): PackageManagerSpec | undefined {
+	return ecosystemManagers[ecosystem].find(
+		(managerSpec) => managerSpec.manager === candidateManager,
+	);
+}
 
 /**
  * Look up the package-manager spec for one ecosystem and manager id.
@@ -140,29 +220,101 @@ export function packageManagerSpec(
 	ecosystem: RegistryEcosystem,
 	manager: RegistryPackageManager,
 ): PackageManagerSpec {
-	const spec = ecosystemManagers[ecosystem].find(
-		(entry) => entry.manager === manager,
-	);
-	if (!spec) {
+	const managerSpec = findPackageManagerSpec(ecosystem, manager);
+	if (!managerSpec) {
 		throw new Error(
 			`Package manager "${manager}" is not valid for ecosystem "${ecosystem}".`,
 		);
 	}
-	return spec;
+	return managerSpec;
 }
 
 /**
  * Whether a string is a supported package manager for the given ecosystem.
  * @param ecosystem - Registry ecosystem to validate against.
- * @param value - Candidate manager id.
- * @returns True when the value is a known manager for that ecosystem.
+ * @param candidateManager - Candidate manager id.
+ * @returns True when the candidate manager is known for that ecosystem.
  */
 export function isPackageManagerForEcosystem(
 	ecosystem: RegistryEcosystem,
-	value: string,
-): value is RegistryPackageManager {
-	return ecosystemManagers[ecosystem].some((entry) => entry.manager === value);
+	candidateManager: string,
+): candidateManager is RegistryPackageManager {
+	return findPackageManagerSpec(ecosystem, candidateManager) !== undefined;
 }
+
+/**
+ * Shared helper to detect a single package manager from an array of manager specs matching file lockfiles.
+ * @param projectDir - Absolute project root.
+ * @param managers - Candidate manager specifications.
+ * @param pathExists - Path existence checker. Defaults to `fs.existsSync`.
+ * @returns Single matching manager and lockfile name, or undefined when none or multiple match.
+ * @throws Error when `projectDir` is not an absolute path.
+ */
+export function detectPackageManagerFromLockfileList(
+	projectDir: string,
+	managers: readonly PackageManagerSpec[],
+	pathExists: (absolutePath: string) => boolean = fs.existsSync,
+): PackageManagerLockfileMatch | undefined {
+	assertAbsoluteProjectDirectory(projectDir);
+
+	const lockfileMatches: PackageManagerLockfileMatch[] = [];
+	for (const managerSpec of managers) {
+		const lockfileName = managerSpec.lockfiles.find((candidateLockfile) =>
+			pathExists(path.join(projectDir, candidateLockfile)),
+		);
+		if (lockfileName)
+			lockfileMatches.push({
+				manager: managerSpec.manager,
+				lockfile: lockfileName,
+			});
+	}
+	if (lockfileMatches.length !== 1) return undefined;
+	return lockfileMatches[0];
+}
+
+/**
+ * Ecosystem adapter for npm / JavaScript package managers.
+ * Reads package manager declarations from `package.json#packageManager`.
+ */
+export const npmEcosystemAdapter: EcosystemPackageManagerAdapter = {
+	detectFromLockfiles: detectPackageManagerFromLockfileList,
+
+	async detectFromManifest(
+		projectDir: string,
+		managers: readonly PackageManagerSpec[],
+		pathExists: (absolutePath: string) => boolean = fs.existsSync,
+	): Promise<RegistryPackageManager | undefined> {
+		assertAbsoluteProjectDirectory(projectDir);
+
+		const packageJsonPath = path.join(projectDir, "package.json");
+		if (!pathExists(packageJsonPath)) return undefined;
+
+		const packageJsonValue = await readJsonFileAsync<unknown>(
+			packageJsonPath,
+			"package.json",
+		);
+		if (
+			typeof packageJsonValue !== "object" ||
+			packageJsonValue === null ||
+			Array.isArray(packageJsonValue)
+		)
+			throw new Error("package.json must be a JSON object.");
+
+		const packageJson = packageJsonValue as Record<string, unknown>;
+		const packageManager = packageJson.packageManager;
+		if (typeof packageManager !== "string") return undefined;
+
+		const managerName = packageManager.split("@", 1)[0];
+		return managers.find(
+			(candidateSpec) => candidateSpec.manager === managerName,
+		)?.manager;
+	},
+};
+
+/** Manifest and lockfile adapters keyed by ecosystem. */
+export const ecosystemAdapters = {
+	[RegistryEcosystem.NPM]: npmEcosystemAdapter,
+} satisfies Record<RegistryEcosystem, EcosystemPackageManagerAdapter>;
 
 /**
  * Deduplicate strings and sort them for stable output.
@@ -175,24 +327,26 @@ export function uniqueSorted(values: readonly string[]): string[] {
 
 /**
  * Reject empty or prototype-polluting command names.
- * @param name - Command key from a payload or hook result.
- * @throws Error when the name is empty or `__proto__`.
+ * @param commandName - Command key from a payload or hook result.
+ * @throws Error when the command name is empty or `__proto__`.
  */
-function assertSafeCommandName(name: string): void {
-	if (name.length === 0) throw new Error("Command name must not be empty.");
-	if (name === "__proto__")
-		throw new Error(`Command "${name}" is not allowed.`);
+function assertSafeCommandName(commandName: string): void {
+	if (commandName.length === 0)
+		throw new Error("Command name must not be empty.");
+	if (commandName === "__proto__")
+		throw new Error(`Command "${commandName}" is not allowed.`);
 }
 
 /**
  * Reject empty or argv-flag package names.
- * @param name - Package specifier from a payload or hook result.
- * @throws Error when the name is empty or starts with `-`.
+ * @param packageName - Package specifier from a payload or hook result.
+ * @throws Error when the package name is empty or starts with `-`.
  */
-function assertSafePackageName(name: string): void {
-	if (name.length === 0) throw new Error("Package name must not be empty.");
-	if (name.startsWith("-"))
-		throw new Error(`Package name "${name}" is not allowed.`);
+function assertSafePackageName(packageName: string): void {
+	if (packageName.length === 0)
+		throw new Error("Package name must not be empty.");
+	if (packageName.startsWith("-"))
+		throw new Error(`Package name "${packageName}" is not allowed.`);
 }
 
 /**
@@ -205,12 +359,17 @@ function uniqueValidatedDependencyLists(
 	...sets: Array<RegistryDependencySet | undefined>
 ): [runtime: string[], dev: string[]] {
 	const runtime = uniqueSorted(
-		sets.flatMap((set) => set?.[RegistryDependencyKind.RUNTIME] ?? []),
+		sets.flatMap(
+			(dependencySet) => dependencySet?.[RegistryDependencyKind.RUNTIME] ?? [],
+		),
 	);
 	const dev = uniqueSorted(
-		sets.flatMap((set) => set?.[RegistryDependencyKind.DEV] ?? []),
+		sets.flatMap(
+			(dependencySet) => dependencySet?.[RegistryDependencyKind.DEV] ?? [],
+		),
 	);
-	for (const name of [...runtime, ...dev]) assertSafePackageName(name);
+	for (const packageName of [...runtime, ...dev])
+		assertSafePackageName(packageName);
 	return [runtime, dev];
 }
 
@@ -229,10 +388,11 @@ export function mergeDependencySet(
 
 	if (runtime.length === 0 && dev.length === 0) return undefined;
 
-	const merged: RegistryDependencySet = {};
-	if (runtime.length > 0) merged[RegistryDependencyKind.RUNTIME] = runtime;
-	if (dev.length > 0) merged[RegistryDependencyKind.DEV] = dev;
-	return merged;
+	const mergedDependencies: RegistryDependencySet = {};
+	if (runtime.length > 0)
+		mergedDependencies[RegistryDependencyKind.RUNTIME] = runtime;
+	if (dev.length > 0) mergedDependencies[RegistryDependencyKind.DEV] = dev;
+	return mergedDependencies;
 }
 
 /**
@@ -249,42 +409,47 @@ export function mergeCommandSet(
 	right: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
 	if (!left && !right) return undefined;
-	const merged: Record<string, string> = {};
-	for (const source of [left, right]) {
-		if (!source) continue;
-		for (const name of Object.keys(source)) {
-			assertSafeCommandName(name);
-			const value = source[name];
-			if (typeof value !== "string" || value.length === 0)
-				throw new Error(`Command "${name}" must be a non-empty string.`);
-			merged[name] = value;
+	const mergedCommands: Record<string, string> = {};
+	for (const commandSet of [left, right]) {
+		if (!commandSet) continue;
+		for (const commandName of Object.keys(commandSet)) {
+			assertSafeCommandName(commandName);
+			const commandValue = commandSet[commandName];
+			if (typeof commandValue !== "string" || commandValue.length === 0)
+				throw new Error(`Command "${commandName}" must be a non-empty string.`);
+			mergedCommands[commandName] = commandValue;
 		}
 	}
-	return Object.keys(merged).length > 0 ? merged : undefined;
+	return Object.keys(mergedCommands).length > 0 ? mergedCommands : undefined;
 }
 
 /**
  * Merge ecosystem-keyed maps by folding each ecosystem with `mergeSet`.
- * @param mergeSet - Per-ecosystem merge function.
+ * @param mergeValues - Per-ecosystem merge function.
  * @param sources - Item, pack, hook, or payload maps.
  * @returns Combined map keyed by ecosystem, or undefined when empty.
  */
 export function mergeEcosystemMaps<T>(
-	mergeSet: (left: T | undefined, right: T | undefined) => T | undefined,
+	mergeValues: (left: T | undefined, right: T | undefined) => T | undefined,
 	...sources: Array<Partial<Record<RegistryEcosystem, T>> | undefined>
 ): Partial<Record<RegistryEcosystem, T>> | undefined {
-	const merged: Partial<Record<RegistryEcosystem, T>> = {};
+	const mergedByEcosystem: Partial<Record<RegistryEcosystem, T>> = {};
 
-	for (const source of sources) {
-		if (!source) continue;
+	for (const ecosystemMap of sources) {
+		if (!ecosystemMap) continue;
 		for (const ecosystem of Object.values(RegistryEcosystem)) {
-			const next = mergeSet(merged[ecosystem], source[ecosystem]);
-			if (next !== undefined) merged[ecosystem] = next;
-			else Reflect.deleteProperty(merged, ecosystem);
+			const mergedValue = mergeValues(
+				mergedByEcosystem[ecosystem],
+				ecosystemMap[ecosystem],
+			);
+			if (mergedValue !== undefined) mergedByEcosystem[ecosystem] = mergedValue;
+			else Reflect.deleteProperty(mergedByEcosystem, ecosystem);
 		}
 	}
 
-	return Object.keys(merged).length > 0 ? merged : undefined;
+	return Object.keys(mergedByEcosystem).length > 0
+		? mergedByEcosystem
+		: undefined;
 }
 
 /**
@@ -296,16 +461,17 @@ export function mergeEcosystemMaps<T>(
 export function mergeSecretNames(
 	...sources: Array<string[] | undefined>
 ): string[] | undefined {
-	const names = new Set<string>();
-	for (const source of sources) {
-		if (!source) continue;
-		for (const name of source) {
-			if (name.length === 0) throw new Error("Secret name must not be empty.");
-			names.add(name);
+	const secretNames = new Set<string>();
+	for (const sourceNames of sources) {
+		if (!sourceNames) continue;
+		for (const secretName of sourceNames) {
+			if (secretName.length === 0)
+				throw new Error("Secret name must not be empty.");
+			secretNames.add(secretName);
 		}
 	}
-	if (names.size === 0) return undefined;
-	return [...names].sort((left, right) => left.localeCompare(right));
+	if (secretNames.size === 0) return undefined;
+	return [...secretNames].sort((left, right) => left.localeCompare(right));
 }
 
 /**
@@ -406,10 +572,10 @@ export function foldCompiledItems(
 export function reservedInterpolationKeys(
 	ecosystem: RegistryEcosystem = RegistryEcosystem.NPM,
 ): string[] {
-	const spec = ecosystemManagers[ecosystem][0];
+	const fallbackManagerSpec = ecosystemManagers[ecosystem][0];
 	/* v8 ignore next — every registered ecosystem declares at least one manager */
-	if (!spec) return [PACKAGE_MANAGER_KEY];
-	return [PACKAGE_MANAGER_KEY, ...Object.keys(spec.bindings)];
+	if (!fallbackManagerSpec) return [PACKAGE_MANAGER_KEY];
+	return [PACKAGE_MANAGER_KEY, ...Object.keys(fallbackManagerSpec.bindings)];
 }
 
 /**
@@ -427,34 +593,6 @@ export function packageManagerBindings(
 }
 
 /**
- * Detect a single package manager from lockfiles in the project root.
- * @param projectDir - Absolute project root.
- * @param ecosystem - Registry ecosystem to detect for.
- * @param pathExists - Existence checker for absolute paths. Defaults to `fs.existsSync`.
- * @returns Matching manager and lockfile name, or undefined when none/ambiguous.
- * @throws Error when `projectDir` is not absolute.
- */
-export function detectPackageManagerFromLockfile(
-	projectDir: string,
-	ecosystem: RegistryEcosystem,
-	pathExists: (absolutePath: string) => boolean = (absolutePath) =>
-		fs.existsSync(absolutePath),
-): { manager: RegistryPackageManager; lockfile: string } | undefined {
-	if (!path.isAbsolute(projectDir))
-		throw new Error("Project directory must be an absolute path.");
-
-	const matches: { manager: RegistryPackageManager; lockfile: string }[] = [];
-	for (const spec of ecosystemManagers[ecosystem]) {
-		const lockfile = spec.lockfiles.find((name) =>
-			pathExists(path.join(projectDir, name)),
-		);
-		if (lockfile) matches.push({ manager: spec.manager, lockfile });
-	}
-	if (matches.length !== 1) return undefined;
-	return matches[0];
-}
-
-/**
  * Whether compiled item files interpolate this ecosystem's package-manager bindings.
  * @param compiledItem - Compiled item whose file templates are scanned.
  * @param ecosystem - Registry ecosystem whose binding keys to look for.
@@ -465,9 +603,13 @@ function compiledItemInterpolatesPackageManager(
 	ecosystem: RegistryEcosystem,
 ): boolean {
 	// Reserved keys are exactly `packageManager` + the ecosystem's `pm*` bindings.
-	const keys = reservedInterpolationKeys(ecosystem);
-	const tag = new RegExp(String.raw`\{\{\s*(?:${keys.join("|")})\s*\}\}`);
-	return compiledItem.files.some((file) => tag.test(file.content));
+	const reservedKeys = reservedInterpolationKeys(ecosystem);
+	const mustacheTagPattern = new RegExp(
+		String.raw`\{\{\s*(?:${reservedKeys.join("|")})\s*\}\}`,
+	);
+	return compiledItem.files.some((file) =>
+		mustacheTagPattern.test(file.content),
+	);
 }
 
 /**
@@ -480,15 +622,17 @@ export function compiledItemUsesEcosystem(
 	compiledItem: CompiledItem,
 	ecosystem: RegistryEcosystem,
 ): boolean {
-	const deps = compiledItem.dependencies?.[ecosystem];
-	const commands = compiledItem.commands?.[ecosystem];
-	const hasDeps =
-		(deps?.[RegistryDependencyKind.RUNTIME]?.length ?? 0) > 0 ||
-		(deps?.[RegistryDependencyKind.DEV]?.length ?? 0) > 0;
+	const ecosystemDependencies = compiledItem.dependencies?.[ecosystem];
+	const ecosystemCommands = compiledItem.commands?.[ecosystem];
+	const hasDependencies =
+		(ecosystemDependencies?.[RegistryDependencyKind.RUNTIME]?.length ?? 0) >
+			0 ||
+		(ecosystemDependencies?.[RegistryDependencyKind.DEV]?.length ?? 0) > 0;
 	const hasCommands =
-		commands !== undefined && Object.keys(commands).length > 0;
+		ecosystemCommands !== undefined &&
+		Object.keys(ecosystemCommands).length > 0;
 	return (
-		hasDeps ||
+		hasDependencies ||
 		hasCommands ||
 		compiledItemInterpolatesPackageManager(compiledItem, ecosystem)
 	);
@@ -506,34 +650,41 @@ export async function selectPackageManager(
 	ecosystem: RegistryEcosystem,
 	projectDir: string,
 	prompt: Pick<PromptHost, "select">,
-	pathExists: (absolutePath: string) => boolean = (absolutePath) =>
-		fs.existsSync(absolutePath),
+	pathExists: (absolutePath: string) => boolean = fs.existsSync,
 ): Promise<RegistryPackageManager> {
-	const detected = detectPackageManagerFromLockfile(
+	const managerSpecs = ecosystemManagers[ecosystem];
+	const adapter = ecosystemAdapters[ecosystem];
+	const declaredManager = await adapter.detectFromManifest(
 		projectDir,
-		ecosystem,
+		managerSpecs,
 		pathExists,
 	);
-	if (detected) return detected.manager;
+	if (declaredManager) return declaredManager;
 
-	const specs = ecosystemManagers[ecosystem];
-	const selected = await prompt.select(
+	const lockfileMatch = adapter.detectFromLockfiles(
+		projectDir,
+		managerSpecs,
+		pathExists,
+	);
+	if (lockfileMatch) return lockfileMatch.manager;
+
+	const selectedManager = await prompt.select(
 		"Which package manager should be used for the project?",
 		{
-			options: specs.map((spec) => ({
-				label: spec.label,
-				value: spec.manager,
+			options: managerSpecs.map((managerSpec) => ({
+				label: managerSpec.label,
+				value: managerSpec.manager,
 			})),
 		},
-		specs[0].manager,
+		managerSpecs[0].manager,
 	);
 
-	if (!isPackageManagerForEcosystem(ecosystem, selected))
+	if (!isPackageManagerForEcosystem(ecosystem, selectedManager))
 		throw new Error(
-			`Unknown packageManager "${selected}". Expected one of: ${specs.map((entry) => entry.manager).join(", ")}.`,
+			`Unknown packageManager "${selectedManager}". Expected one of: ${managerSpecs.map((managerSpec) => managerSpec.manager).join(", ")}.`,
 		);
 
-	return selected;
+	return selectedManager;
 }
 
 /**
@@ -553,20 +704,23 @@ export function buildPackageInstallCommands(
 	const [runtime, dev] = uniqueValidatedDependencyLists(dependencySet);
 	if (runtime.length === 0 && dev.length === 0) return [];
 
-	const spec = packageManagerSpec(ecosystem, manager);
+	const managerSpec = packageManagerSpec(ecosystem, manager);
 	const commands: PackageInstallCommand[] = [];
 
-	const append = (kind: RegistryDependencyKind, packages: string[]): void => {
-		if (packages.length === 0) return;
-		const args = [...spec.install[kind], ...packages];
+	const addInstallCommand = (
+		dependencyKind: RegistryDependencyKind,
+		packageNames: string[],
+	): void => {
+		if (packageNames.length === 0) return;
+		const args = [...managerSpec.install[dependencyKind], ...packageNames];
 		commands.push({
-			executable: spec.manager,
+			executable: managerSpec.manager,
 			args,
-			display: [spec.manager, ...args].join(" "),
+			display: [managerSpec.manager, ...args].join(" "),
 		});
 	};
 
-	append(RegistryDependencyKind.RUNTIME, runtime);
-	append(RegistryDependencyKind.DEV, dev);
+	addInstallCommand(RegistryDependencyKind.RUNTIME, runtime);
+	addInstallCommand(RegistryDependencyKind.DEV, dev);
 	return commands;
 }

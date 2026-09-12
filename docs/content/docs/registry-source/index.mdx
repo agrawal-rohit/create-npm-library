@@ -47,7 +47,7 @@ That writes:
 - `r/{itemId}/{packId}.json` — per-pack compiled items
 - Bundled install scripts and condition handlers under `r/`
 
-Npm-ecosystem `dependencies` and `commands` identify packages and `package.json` scripts. The CLI selects a package manager (npm, pnpm, Yarn, or Bun) at install time. Packs can match that selection with `when.packageManager`. Templates can interpolate `{{packageManager}}`, `{{pmRun}}`, `{{pmExec}}`, `{{pmInstall}}`, and `{{pmPublish}}`.
+Npm-ecosystem `dependencies` and `commands` identify packages and `package.json` scripts. The CLI selects a package manager (npm, pnpm, Yarn, Bun, or Nub) at install time, preferring `package.json#packageManager`, then an unambiguous lockfile, and finally a prompt. Packs can match that selection with `when.packageManager`. Templates can interpolate `{{packageManager}}`, `{{pmRun}}`, `{{pmExec}}`, `{{pmInstall}}`, and `{{pmPublish}}`.
 
 ## Conditions
 

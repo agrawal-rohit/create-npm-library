@@ -29,7 +29,8 @@ describe("package entry", () => {
 		expect(typeof core.joinRelativePathUnderRoot).toBe("function");
 		expect(typeof core.isEscapingRelativePath).toBe("function");
 		expect(typeof core.isNonRelativePath).toBe("function");
-		expect(typeof core.detectPackageManagerFromLockfile).toBe("function");
+		expect(core.ecosystemAdapters).toBeDefined();
+		expect(typeof core.detectPackageManagerFromLockfileList).toBe("function");
 		expect(typeof core.selectPackageManager).toBe("function");
 		expect(typeof core.catalogNeedsPackageManager).toBe("function");
 		expect(typeof core.packageManagerDropsCandidateDependsOn).toBe("function");

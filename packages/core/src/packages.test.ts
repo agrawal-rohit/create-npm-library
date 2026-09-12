@@ -7,7 +7,8 @@ import {
 	buildPackageInstallCommands,
 	compiledItem,
 	compiledItemUsesEcosystem,
-	detectPackageManagerFromLockfile,
+	detectPackageManagerFromLockfileList,
+	ecosystemAdapters,
 	ecosystemManagers,
 	foldCompiledItems,
 	isPackageManagerForEcosystem,
@@ -253,6 +254,7 @@ describe("core/packages", () => {
 				NpmPackageManager.PNPM,
 				NpmPackageManager.YARN,
 				NpmPackageManager.BUN,
+				NpmPackageManager.NUB,
 			]);
 		});
 	});
@@ -283,12 +285,12 @@ describe("core/packages", () => {
 		});
 	});
 
-	describe("detectPackageManagerFromLockfile", () => {
-		it("returns the manager when exactly one lockfile matches", () => {
+	describe("detectPackageManagerFromLockfileList", () => {
+		it("delegates detection across manager specs", () => {
 			expect(
-				detectPackageManagerFromLockfile(
+				detectPackageManagerFromLockfileList(
 					"/project",
-					RegistryEcosystem.NPM,
+					ecosystemManagers[RegistryEcosystem.NPM],
 					(absolutePath) => absolutePath.endsWith("pnpm-lock.yaml"),
 				),
 			).toEqual({
@@ -296,22 +298,60 @@ describe("core/packages", () => {
 				lockfile: "pnpm-lock.yaml",
 			});
 		});
+	});
+
+	describe("npm lockfile adapter", () => {
+		const detectLockfiles = (
+			projectDir: string,
+			pathExists?: (absolutePath: string) => boolean,
+		) =>
+			ecosystemAdapters[RegistryEcosystem.NPM].detectFromLockfiles(
+				projectDir,
+				ecosystemManagers[RegistryEcosystem.NPM],
+				pathExists,
+			);
+
+		it("returns the manager when exactly one lockfile matches", () => {
+			expect(
+				detectLockfiles("/project", (absolutePath) =>
+					absolutePath.endsWith("pnpm-lock.yaml"),
+				),
+			).toEqual({
+				manager: NpmPackageManager.PNPM,
+				lockfile: "pnpm-lock.yaml",
+			});
+		});
+
+		it("recognizes npm shrinkwrap files", () => {
+			expect(
+				detectLockfiles("/project", (absolutePath) =>
+					absolutePath.endsWith("npm-shrinkwrap.json"),
+				),
+			).toEqual({
+				manager: NpmPackageManager.NPM,
+				lockfile: "npm-shrinkwrap.json",
+			});
+		});
+
+		it("recognizes Nub lockfiles", () => {
+			expect(
+				detectLockfiles("/project", (absolutePath) =>
+					absolutePath.endsWith("nub.lock"),
+				),
+			).toEqual({
+				manager: NpmPackageManager.NUB,
+				lockfile: "nub.lock",
+			});
+		});
 
 		it("returns undefined when no lockfile matches", () => {
-			expect(
-				detectPackageManagerFromLockfile(
-					"/project",
-					RegistryEcosystem.NPM,
-					() => false,
-				),
-			).toBeUndefined();
+			expect(detectLockfiles("/project", () => false)).toBeUndefined();
 		});
 
 		it("returns undefined when multiple lockfiles match", () => {
 			expect(
-				detectPackageManagerFromLockfile(
+				detectLockfiles(
 					"/project",
-					RegistryEcosystem.NPM,
 					(absolutePath) =>
 						absolutePath.endsWith("package-lock.json") ||
 						absolutePath.endsWith("pnpm-lock.yaml"),
@@ -320,18 +360,119 @@ describe("core/packages", () => {
 		});
 
 		it("rejects a relative project directory", () => {
-			expect(() =>
-				detectPackageManagerFromLockfile("project", RegistryEcosystem.NPM),
-			).toThrow("Project directory must be an absolute path.");
+			expect(() => detectLockfiles("project")).toThrow(
+				"Project directory must be an absolute path.",
+			);
 		});
 
 		it("uses fs.existsSync when no path checker is provided", () => {
 			expect(
-				detectPackageManagerFromLockfile(
-					path.join(import.meta.dirname, "..", "..", ".."),
-					RegistryEcosystem.NPM,
-				),
+				detectLockfiles(path.join(import.meta.dirname, "..", "..", "..")),
 			).toEqual({ manager: "pnpm", lockfile: "pnpm-lock.yaml" });
+		});
+	});
+
+	describe("npm manifest adapter", () => {
+		const detectManifest = (
+			projectDir: string,
+			pathExists?: (absolutePath: string) => boolean,
+		) =>
+			ecosystemAdapters[RegistryEcosystem.NPM].detectFromManifest(
+				projectDir,
+				ecosystemManagers[RegistryEcosystem.NPM],
+				pathExists,
+			);
+
+		it("reads the manager name and ignores its version", async () => {
+			const projectDir = fs.mkdtempSync(
+				path.join(os.tmpdir(), "packages-package-json-"),
+			);
+			createdDirs.push(projectDir);
+			fs.writeFileSync(
+				path.join(projectDir, "package.json"),
+				JSON.stringify({ packageManager: "nub@0.2.0" }),
+				"utf8",
+			);
+
+			await expect(detectManifest(projectDir)).resolves.toBe(
+				NpmPackageManager.NUB,
+			);
+		});
+
+		it("returns undefined when package.json is absent or unsupported", async () => {
+			const projectDir = fs.mkdtempSync(
+				path.join(os.tmpdir(), "packages-package-json-"),
+			);
+			createdDirs.push(projectDir);
+
+			await expect(detectManifest(projectDir)).resolves.toBeUndefined();
+
+			fs.writeFileSync(
+				path.join(projectDir, "package.json"),
+				JSON.stringify({}),
+				"utf8",
+			);
+			await expect(detectManifest(projectDir)).resolves.toBeUndefined();
+
+			fs.writeFileSync(
+				path.join(projectDir, "package.json"),
+				JSON.stringify({ packageManager: "deno@2.0.0" }),
+				"utf8",
+			);
+			await expect(detectManifest(projectDir)).resolves.toBeUndefined();
+		});
+
+		it.each([
+			null,
+			[],
+			"not an object",
+		])("rejects a non-object package.json value: %j", async (manifestValue) => {
+			const projectDir = fs.mkdtempSync(
+				path.join(os.tmpdir(), "packages-package-json-"),
+			);
+			createdDirs.push(projectDir);
+			fs.writeFileSync(
+				path.join(projectDir, "package.json"),
+				JSON.stringify(manifestValue),
+				"utf8",
+			);
+
+			await expect(detectManifest(projectDir)).rejects.toThrow(
+				"package.json must be a JSON object.",
+			);
+		});
+
+		it("rejects a relative project directory", async () => {
+			await expect(detectManifest("project")).rejects.toThrow(
+				"Project directory must be an absolute path.",
+			);
+		});
+
+		it("delegates through ecosystem definitions and adapters", async () => {
+			const projectDir = fs.mkdtempSync(
+				path.join(os.tmpdir(), "packages-adapter-"),
+			);
+			createdDirs.push(projectDir);
+			fs.writeFileSync(
+				path.join(projectDir, "package.json"),
+				JSON.stringify({ packageManager: "pnpm@10.0.0" }),
+				"utf8",
+			);
+
+			const adapter = ecosystemAdapters[RegistryEcosystem.NPM];
+			const managers = ecosystemManagers[RegistryEcosystem.NPM];
+			expect(adapter.detectFromManifest).toBeDefined();
+			await expect(
+				adapter.detectFromManifest(projectDir, managers),
+			).resolves.toBe(NpmPackageManager.PNPM);
+			expect(
+				adapter.detectFromLockfiles(projectDir, managers, (absolutePath) =>
+					absolutePath.endsWith("pnpm-lock.yaml"),
+				),
+			).toEqual({
+				manager: NpmPackageManager.PNPM,
+				lockfile: "pnpm-lock.yaml",
+			});
 		});
 	});
 
@@ -345,6 +486,17 @@ describe("core/packages", () => {
 				pmInstall: "pnpm install --ignore-scripts --frozen-lockfile",
 				pmPublish:
 					"pnpm -r publish --provenance --access public --no-git-checks",
+			});
+		});
+
+		it("returns Nub interpolation bindings", () => {
+			expect(
+				packageManagerBindings(RegistryEcosystem.NPM, NpmPackageManager.NUB),
+			).toEqual({
+				pmRun: "nub run",
+				pmExec: "nub exec",
+				pmInstall: "nub install --ignore-scripts --frozen-lockfile",
+				pmPublish: "nub publish --access public",
 			});
 		});
 	});
@@ -432,6 +584,25 @@ describe("core/packages", () => {
 	});
 
 	describe("selectPackageManager", () => {
+		it("prefers package.json over lockfiles", async () => {
+			const projectDir = fs.mkdtempSync(
+				path.join(os.tmpdir(), "packages-select-"),
+			);
+			createdDirs.push(projectDir);
+			fs.writeFileSync(
+				path.join(projectDir, "package.json"),
+				JSON.stringify({ packageManager: "yarn@4.0.0" }),
+				"utf8",
+			);
+			fs.writeFileSync(path.join(projectDir, "pnpm-lock.yaml"), "", "utf8");
+
+			const select = vi.fn();
+			await expect(
+				selectPackageManager(RegistryEcosystem.NPM, projectDir, { select }),
+			).resolves.toBe(NpmPackageManager.YARN);
+			expect(select).not.toHaveBeenCalled();
+		});
+
 		it("returns the lockfile manager without prompting", async () => {
 			const select = vi.fn();
 			await expect(
@@ -603,6 +774,19 @@ describe("core/packages", () => {
 					executable: "bun",
 					args: ["add", "--ignore-scripts", "zod"],
 					display: "bun add --ignore-scripts zod",
+				},
+			]);
+			expect(
+				buildPackageInstallCommands(
+					RegistryEcosystem.NPM,
+					NpmPackageManager.NUB,
+					{ runtime: ["zod"] },
+				),
+			).toEqual([
+				{
+					executable: "nub",
+					args: ["add", "--ignore-scripts", "zod"],
+					display: "nub add --ignore-scripts zod",
 				},
 			]);
 		});
