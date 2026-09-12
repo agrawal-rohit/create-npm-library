@@ -10,6 +10,7 @@
 	"conditions": {
 		"coverageThreshold": {
 			"kind": "text",
+			"required": true,
 			"label": "Coverage line threshold",
 			"description": "Minimum line coverage percentage (default 45).",
 			"default": "80"

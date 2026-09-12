@@ -66,7 +66,7 @@ async function promptMultiselectCondition(
 	promptMessage: string,
 	inferred: RegistryContextValue | undefined,
 ): Promise<string[] | undefined> {
-	const optional = condition.optional === true;
+	const optional = condition.required !== true;
 	const sole = soleOptionValue(condition, optional);
 	if (sole !== undefined) return [sole];
 
@@ -94,11 +94,11 @@ function assertNoReservedSkipValue(
 	skipValue: string,
 ): void {
 	if (
-		condition.optional === true &&
+		condition.required !== true &&
 		condition.values.some((entry) => entry.value === skipValue)
 	)
 		throw new Error(
-			`Condition "${condition.key}" value "${skipValue}" is reserved for skipping optional selects.`,
+			`Condition "${condition.key}" value "${skipValue}" is reserved for skipping non-required selects.`,
 		);
 }
 
@@ -137,7 +137,7 @@ function selectOptionsWithSkip(
 	skipValue: string,
 ): Array<{ label: string; value: string }> {
 	const options = conditionSelectOptions(condition);
-	return condition.optional === true
+	return condition.required !== true
 		? [...options, { label: skipValue, value: skipValue }]
 		: options;
 }
@@ -158,7 +158,7 @@ async function promptSelectCondition(
 	const skipValue = "None";
 	assertNoReservedSkipValue(condition, skipValue);
 
-	const sole = soleOptionValue(condition, condition.optional === true);
+	const sole = soleOptionValue(condition, condition.required !== true);
 	if (sole !== undefined) return sole;
 
 	if (
@@ -173,7 +173,7 @@ async function promptSelectCondition(
 		typeof inferred === "string" ? inferred : undefined,
 	);
 
-	if (condition.optional === true && selected === skipValue) return undefined;
+	if (condition.required !== true && selected === skipValue) return undefined;
 	return selected;
 }
 
@@ -254,7 +254,7 @@ async function promptConditionValue(
 	condition: RequiredCondition,
 	inferred: RegistryContextValue | undefined,
 ): Promise<RegistryContextValue | undefined> {
-	const optional = condition.optional === true;
+	const optional = condition.required !== true;
 	const promptMessage = condition.description ?? condition.label;
 	const { kind } = policyForConditionKind(condition.kind);
 
@@ -284,7 +284,7 @@ async function promptConditionValue(
  * @returns True when the prompt will auto-select and ignore inferred defaults.
  */
 function conditionValueIsDetermined(condition: RequiredCondition): boolean {
-	if (condition.optional === true) return false;
+	if (condition.required !== true) return false;
 	const { kind } = policyForConditionKind(condition.kind);
 	switch (kind) {
 		case RegistryConditionKind.SELECT:

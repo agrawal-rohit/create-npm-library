@@ -10,5 +10,9 @@
 	"agent-instruction": {
 		"label": "Agent Instructions",
 		"description": "Coding agent and IDE instructions that guide AI behaviour."
+	},
+	"starter-template": {
+		"label": "Starter Templates",
+		"description": "Composable project scaffolds."
 	}
 }

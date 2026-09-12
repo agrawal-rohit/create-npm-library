@@ -38,6 +38,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				authorName: {
 					kind: RegistryConditionKind.TEXT,
+					required: true,
 					label: "Author",
 				},
 			},
@@ -73,6 +74,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				tags: {
 					kind: RegistryConditionKind.MULTISELECT,
+					required: true,
 					label: "Tags",
 					values: [{ value: "docs", label: "Docs" }],
 				},
@@ -105,6 +107,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				language: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Language",
 					handler: "conditions/language.ts",
 					values: [{ value: "typescript", label: "TypeScript" }],
@@ -147,7 +150,6 @@ describe("utils/conditions", () => {
 				coverageThreshold: {
 					kind: RegistryConditionKind.TEXT,
 					label: "Coverage",
-					optional: true,
 				},
 			},
 			items: {
@@ -184,8 +186,7 @@ describe("utils/conditions", () => {
 				enableCi: {
 					kind: RegistryConditionKind.BOOLEAN,
 					label: "Enable CI",
-					optional: true,
-					default: "true",
+					default: true,
 				},
 			},
 			items: {
@@ -220,7 +221,6 @@ describe("utils/conditions", () => {
 				enableCi: {
 					kind: RegistryConditionKind.BOOLEAN,
 					label: "Enable CI",
-					optional: true,
 				},
 			},
 			items: {
@@ -251,7 +251,6 @@ describe("utils/conditions", () => {
 				platforms: {
 					kind: RegistryConditionKind.MULTISELECT,
 					label: "Platforms",
-					optional: true,
 					values: [
 						{ value: "ios", label: "iOS" },
 						{ value: "android", label: "Android" },
@@ -287,7 +286,6 @@ describe("utils/conditions", () => {
 				language: {
 					kind: RegistryConditionKind.SELECT,
 					label: "Language",
-					optional: true,
 					values: [
 						{ value: "typescript", label: "TypeScript" },
 						{ value: "python", label: "Python" },
@@ -328,6 +326,7 @@ describe("utils/conditions", () => {
 					conditions: {
 						coverageThreshold: {
 							kind: RegistryConditionKind.TEXT,
+							required: true,
 							label: "Coverage",
 						},
 					},
@@ -361,6 +360,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				coverageThreshold: {
 					kind: RegistryConditionKind.TEXT,
+					required: true,
 					label: "Coverage",
 					default: "80",
 					handler: "r/missing.handler.js",
@@ -412,6 +412,7 @@ describe("utils/conditions", () => {
 					conditions: {
 						flavor: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Flavor",
 							values: [
 								{ value: "basic", label: "Basic" },
@@ -494,14 +495,13 @@ describe("utils/conditions", () => {
 		);
 	});
 
-	it("rejects optional selects that declare None as a value", async () => {
+	it("rejects non-required selects that declare None as a value", async () => {
 		const registry: Registry = {
 			types: { configuration: { label: "Configurations" } },
 			conditions: {
 				language: {
 					kind: RegistryConditionKind.SELECT,
 					label: "Language",
-					optional: true,
 					values: [
 						{ value: "None", label: "None" },
 						{ value: "typescript", label: "TypeScript" },
@@ -527,7 +527,7 @@ describe("utils/conditions", () => {
 				["demo"],
 			),
 		).rejects.toThrow(
-			'Condition "language" value "None" is reserved for skipping optional selects.',
+			'Condition "language" value "None" is reserved for skipping non-required selects.',
 		);
 	});
 
@@ -538,6 +538,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				codingAgentIDE: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Coding agent",
 					default: "cursor",
 					values: [
@@ -581,6 +582,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				codingAgentIDE: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Coding agent",
 					default: "cursor",
 					values: [
@@ -632,6 +634,7 @@ describe("utils/conditions", () => {
 			conditions: {
 				codingAgentIDE: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Coding agent",
 					default: "cursor",
 					values: [

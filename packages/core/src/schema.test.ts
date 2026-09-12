@@ -422,6 +422,62 @@ describe("core/schema", () => {
 			).toMatchObject({ kind: "text", default: "45" });
 		});
 
+		it("keeps a boolean condition default as a boolean", () => {
+			expect(
+				registryConditionSchema.parse(
+					validCondition({
+						kind: "boolean",
+						values: undefined,
+						default: true,
+					}),
+				),
+			).toMatchObject({ kind: "boolean", default: true });
+		});
+
+		it("keeps a multiselect condition default as an array", () => {
+			expect(
+				registryConditionSchema.parse(
+					validCondition({
+						kind: "multiselect",
+						values: [
+							validConditionValue({ value: "biome", label: "Biome" }),
+							validConditionValue({ value: "fallow", label: "Fallow" }),
+						],
+						default: ["biome", "fallow"],
+					}),
+				),
+			).toMatchObject({
+				kind: "multiselect",
+				default: ["biome", "fallow"],
+			});
+		});
+
+		it("rejects a string default for a boolean condition", () => {
+			expect(
+				rejectMessage(
+					registryConditionSchema,
+					validCondition({
+						kind: "boolean",
+						values: undefined,
+						default: "true",
+					}),
+				),
+			).toBe("invalid_default:boolean");
+		});
+
+		it("rejects a boolean default for a non-boolean condition", () => {
+			expect(
+				rejectMessage(
+					registryConditionSchema,
+					validCondition({
+						kind: "text",
+						values: undefined,
+						default: true,
+					}),
+				),
+			).toBe("invalid_default:text");
+		});
+
 		it("rejects duplicate condition values", () => {
 			expect(
 				rejectMessage(
@@ -975,7 +1031,7 @@ describe("core/schema", () => {
 						coverageThreshold: {
 							kind: "text",
 							label: "Coverage",
-							optional: true,
+							required: true,
 						},
 					},
 				}),
@@ -990,7 +1046,7 @@ describe("core/schema", () => {
 					coverageThreshold: {
 						kind: "text",
 						label: "Coverage",
-						optional: true,
+						required: true,
 					},
 				},
 			});

@@ -2,9 +2,11 @@ import type { Dirent } from "node:fs";
 import path from "node:path";
 import * as esbuild from "esbuild";
 import {
+	isDirectoryAsync,
 	isFileAsync,
 	isMissingPathError,
 	readDirectoryAsync,
+	readDirectoryFilesAsync,
 	readFileAsync,
 	readJsonFileAsync,
 	removeAsync,
@@ -274,6 +276,8 @@ async function collectItemDirs(
 
 /**
  * Read local file contents for payload inlining.
+ * When a file `source` resolves to a directory, every leaf file under it is
+ * emitted with its inner path appended to the entry `target`.
  * @param itemDir - Absolute item folder.
  * @param itemId - Item id for errors.
  * @param sourceDir - Absolute registry source (for relative error paths).
@@ -287,7 +291,7 @@ async function materializeCompiledItemFiles(
 	sourceDir: string,
 	files: RegistryFile[],
 ): Promise<CompiledItemFile[]> {
-	return Promise.all(
+	const materialized = await Promise.all(
 		files.map(async (file) => {
 			const absolutePath = joinRelativePathUnderRoot(
 				itemDir,
@@ -295,16 +299,56 @@ async function materializeCompiledItemFiles(
 				`Registry item "${itemId}" file source`,
 				"item folder",
 			);
+			if (await isDirectoryAsync(absolutePath)) {
+				const leaves = await collectDirectoryFiles(absolutePath);
+				return Promise.all(
+					leaves.map(async (leaf) => ({
+						target: joinTargetUnder(
+							file.target,
+							path.relative(absolutePath, leaf.absolute),
+						),
+						content: await readFileAsync(leaf.absolute),
+					})),
+				);
+			}
 			if (!(await isFileAsync(absolutePath)))
 				throw new Error(
 					`Registry item "${itemId}" references missing file: ${path.relative(sourceDir, absolutePath)}`,
 				);
-			return {
-				target: file.target,
-				content: await readFileAsync(absolutePath),
-			};
+			return [
+				{
+					target: file.target,
+					content: await readFileAsync(absolutePath),
+				},
+			];
 		}),
 	);
+	return materialized.flat();
+}
+
+/**
+ * Join an inner file path under a target directory root, collapsing empty roots.
+ * @param targetRoot - Directory root from the registry item.
+ * @param innerPath - File path relative to the source directory.
+ * @returns Joined target path (forward-slash separated).
+ */
+function joinTargetUnder(targetRoot: string, innerPath: string): string {
+	if (!targetRoot || targetRoot === ".")
+		return innerPath.split(path.sep).join("/");
+	const trimmed = targetRoot.replace(/[/\\]+$/, "");
+	return `${trimmed}/${innerPath.split(path.sep).join("/")}`;
+}
+
+/**
+ * Recursively list leaf files under a directory.
+ * @param directoryRoot - Absolute directory to walk.
+ * @returns Absolute paths of every leaf file, in deterministic order.
+ */
+async function collectDirectoryFiles(
+	directoryRoot: string,
+): Promise<Array<{ absolute: string }>> {
+	const entries = await readDirectoryFilesAsync(directoryRoot);
+	return entries.map((absolute) => ({ absolute }));
 }
 
 /**

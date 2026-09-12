@@ -128,9 +128,9 @@ export interface RequiredCondition {
 	/** Compiled condition handler URI when the index declares one. */
 	handler?: string;
 	/** Default prompt value when the index declares one and no handler runs. */
-	default?: string;
-	/** When true, allow skipping the condition value. */
-	optional?: boolean;
+	default?: RegistryContextValue;
+	/** Whether the condition must receive a value; omitted means false. */
+	required?: boolean;
 }
 
 /**
@@ -968,7 +968,7 @@ function buildRequiredCondition(
 		requiredCondition.description = condition.description;
 	if (condition.handler) requiredCondition.handler = condition.handler;
 	if (condition.default) requiredCondition.default = condition.default;
-	if (condition.optional === true) requiredCondition.optional = true;
+	if (condition.required === true) requiredCondition.required = true;
 	return requiredCondition;
 }
 

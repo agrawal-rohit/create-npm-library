@@ -2,13 +2,13 @@ import type { BeforeWriteHook } from "@tuckshop/core";
 
 /**
  * Initialize `.release-please-manifest.json` from the version currently in
- * `package.json`. Falls back to `0.1.0` when `package.json` is missing or
+ * `package.json`. Falls back to `0.0.1` when `package.json` is missing or
  * unversioned, so the manifest is always valid for a fresh project.
  * @param ctx - Install hook context.
  * @returns Updated `.release-please-manifest.json` file.
  */
 const initializeReleasePleaseManifest: BeforeWriteHook = async (ctx) => {
-	let version = "0.1.0";
+	let version = "0.0.1";
 
 	if (await ctx.isFile("package.json")) {
 		try {

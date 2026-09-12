@@ -1,6 +1,7 @@
 {
 	"language": {
 		"kind": "select",
+		"required": true,
 		"label": "Language",
 		"description": "Which language are you planning to use?",
 		"handler": "conditions/language.handler.ts",
@@ -16,24 +17,28 @@
 	},
 	"authorName": {
 		"kind": "text",
+		"required": true,
 		"label": "Author name",
 		"description": "Who should be credited as the author?",
 		"handler": "conditions/author-name.handler.ts"
 	},
+	"githubUsername": {
+		"kind": "text",
+		"required": true,
+		"label": "GitHub username or org",
+		"description": "GitHub owner used in repository URLs.",
+		"handler": "conditions/github-username.handler.ts"
+	},
 	"defaultBranch": {
 		"kind": "text",
+		"required": true,
 		"label": "Default branch",
 		"description": "Primary branch name for workflows and Dependabot.",
 		"handler": "conditions/default-branch.handler.ts"
 	},
-	"nodeVersion": {
-		"kind": "text",
-		"label": "Node.js version",
-		"description": "Node major version for CI setup.",
-		"handler": "conditions/node-version.handler.ts"
-	},
 	"codingAgentIDE": {
 		"kind": "select",
+		"required": true,
 		"label": "Coding agent",
 		"description": "Which coding agent or IDE should instructions be generated for?",
 		"handler": "conditions/ide-format.handler.ts",

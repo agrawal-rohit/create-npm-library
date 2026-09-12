@@ -4,9 +4,17 @@
 	"description": "Composite GitHub Action for setting up a workspace.",
 	"type": "workflow",
 	"requires": [
-		"language",
-		"nodeVersion"
+		"language"
 	],
+	"conditions": {
+		"nodeVersion": {
+			"kind": "text",
+			"required": true,
+			"label": "Node.js version",
+			"description": "Node major version for CI setup.",
+			"handler": "node-version.handler.ts"
+		}
+	},
 	"packs": [
 		{
 			"id": "typescript-pnpm",

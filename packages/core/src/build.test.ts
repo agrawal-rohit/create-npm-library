@@ -416,6 +416,67 @@ describe("buildRegistry", () => {
 		);
 	});
 
+	it("expands a directory source into per-file compiled entries", async () => {
+		writeItem(
+			tempDir,
+			"component/widget",
+			{
+				id: "widget",
+				title: "Widget",
+				description: "A widget with directory-based sources.",
+				type: "component",
+				files: [{ source: "react", target: "src/components/widget" }],
+			},
+			{
+				"react/index.tsx": "export const Widget = () => null;\n",
+				"react/sub/widget.test.tsx": "test('widget', () => {});\n",
+			},
+		);
+
+		const document = await runBuild();
+		const payload = JSON.parse(
+			fs.readFileSync(path.join(tempDir, "r/widget.json"), "utf8"),
+		) as CompiledItem;
+		expect(payload.files.map((file) => file.target)).toEqual([
+			"src/components/widget/index.tsx",
+			"src/components/widget/sub/widget.test.tsx",
+		]);
+		expect(payload.files[0].content).toContain("Widget");
+		expect(document.items["widget"]).toEqual({
+			title: "Widget",
+			description: "A widget with directory-based sources.",
+			type: "component",
+			source: "r/widget.json",
+		});
+	});
+
+	it("anchors a directory source at the project root when target is '.'", async () => {
+		writeItem(
+			tempDir,
+			"component/snippet",
+			{
+				id: "snippet",
+				title: "Snippet",
+				description: "Snippets copied to project root.",
+				type: "component",
+				files: [{ source: "snippets", target: "." }],
+			},
+			{
+				"snippets/hello.md": "# hello\n",
+				"snippets/nested/bye.md": "# bye\n",
+			},
+		);
+
+		await runBuild();
+		const payload = JSON.parse(
+			fs.readFileSync(path.join(tempDir, "r/snippet.json"), "utf8"),
+		) as CompiledItem;
+		expect(payload.files.map((file) => file.target)).toEqual([
+			"hello.md",
+			"nested/bye.md",
+		]);
+	});
+
 	it("throws when types.json is absent", async () => {
 		fs.rmSync(path.join(tempDir, "registry", "types.json"));
 		fs.mkdirSync(path.join(tempDir, "registry"), { recursive: true });

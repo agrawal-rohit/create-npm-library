@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
 	policyForConditionKind,
 	RegistryConditionKind,
+	type RegistryContextValue,
 } from "./condition-kind";
 import { isEscapingRelativePath, isNonRelativePath } from "./urls";
 
@@ -161,9 +162,9 @@ export enum InstallPhase {
 	AFTER_INSTALL = "afterInstall",
 }
 
-/** File metadata in an raw `registry-item.json`. */
+/** File or directory source metadata in a raw `registry-item.json`. */
 export const registryFileSchema = z.strictObject({
-	/** Path to the file in the item folder. */
+	/** Path to a file or directory in the item folder. */
 	source: relativeFilePathSchema,
 	/** Destination path in the consuming project. */
 	target: relativeFilePathSchema,
@@ -349,10 +350,10 @@ interface RegistryConditionSchemaInput {
 	label: string;
 	description?: string;
 	kind: RegistryConditionKind;
-	optional?: boolean;
+	required?: boolean;
 	when?: RegistryWhen;
 	min?: number;
-	default?: string;
+	default?: RegistryContextValue;
 	handler?: string;
 	values?: RegistryConditionValue[];
 }
@@ -389,6 +390,50 @@ function rejectInvalidConditionMin(
 		return true;
 	}
 	return false;
+}
+
+/** Check whether a condition default has the value type supported by its kind. */
+function conditionDefaultMatchesKind(
+	defaultValue: RegistryContextValue,
+	kind: RegistryConditionKind,
+): boolean {
+	switch (kind) {
+		case RegistryConditionKind.BOOLEAN:
+			return typeof defaultValue === "boolean";
+		case RegistryConditionKind.MULTISELECT:
+			return (
+				typeof defaultValue === "string" ||
+				(Array.isArray(defaultValue) &&
+					defaultValue.every((value) => typeof value === "string"))
+			);
+		case RegistryConditionKind.SELECT:
+		case RegistryConditionKind.TEXT:
+			return typeof defaultValue === "string";
+		/* v8 ignore start */
+		default: {
+			const exhaustive: never = kind;
+			throw new Error(`Unsupported condition kind: ${String(exhaustive)}`);
+		}
+		/* v8 ignore stop */
+	}
+}
+
+/**
+ * Validate that a condition default matches the condition's value type.
+ * @param condition - Parsed registry condition candidate.
+ * @param kind - Effective condition kind.
+ * @param context - Zod refinement context collecting validation issues.
+ * @returns True when validation should stop early.
+ */
+function rejectInvalidConditionDefault(
+	condition: RegistryConditionSchemaInput,
+	kind: RegistryConditionKind,
+	context: z.RefinementCtx,
+): boolean {
+	if (condition.default === undefined) return false;
+	if (conditionDefaultMatchesKind(condition.default, kind)) return false;
+	addConditionIssue(context, `invalid_default:${kind}`);
+	return true;
 }
 
 /**
@@ -461,14 +506,16 @@ export const registryConditionSchema = z
 		description: optionalNonEmptyString(),
 		/** Type of condition to prompt for. */
 		kind: z.enum(RegistryConditionKind),
-		/** When true, allow skipping the condition value. */
-		optional: z.boolean().optional(),
+		/** When true, require the condition value. Defaults to false. */
+		required: z.boolean().optional(),
 		/** Prompt this condition only when the current context matches. */
 		when: registryWhenSchema,
 		/** Minimum number of selected values required for multiselect conditions. */
 		min: z.number().int().min(1).optional(),
 		/** Default prompt value when no infer handler is declared. */
-		default: nonEmptyString.optional(),
+		default: z
+			.union([nonEmptyString, z.array(nonEmptyString).min(1), z.boolean()])
+			.optional(),
 		/** Handler path: authoring-relative, or compiled `r/_handlers/{key}.handler.js` / `r/_handlers/items/{itemId}/{key}.handler.js` URI. */
 		handler: registryScriptPathSchema.optional(),
 		/** Allowed labelled values for select and multiselect conditions. */
@@ -477,13 +524,20 @@ export const registryConditionSchema = z
 	.superRefine((data, context) => {
 		const { kind, requiresValues } = policyForConditionKind(data.kind);
 		if (rejectInvalidConditionMin(data, kind, context)) return;
+		if (rejectInvalidConditionDefault(data, kind, context)) return;
 		if (requiresValues) {
 			if (rejectInvalidSelectableCondition(data, kind, context)) return;
 			if (data.default === undefined) return;
 			// `values` is non-empty here: rejectInvalidSelectableCondition already returned.
-			if (!data.values!.some((entry) => entry.value === data.default)) {
-				addConditionIssue(context, `undeclared_default:${data.default}`);
-			}
+			const defaults = Array.isArray(data.default)
+				? data.default
+				: [data.default];
+			if (
+				!defaults.every((value) =>
+					data.values?.some((entry) => entry.value === value),
+				)
+			)
+				addConditionIssue(context, `undeclared_default:${defaults.join(",")}`);
 			return;
 		}
 		rejectInvalidNonSelectableCondition(data, kind, context);
@@ -498,7 +552,7 @@ export const registryConditionSchema = z
 			description: condition.description,
 			when: condition.when,
 			min: condition.min,
-			optional: condition.optional === true ? true : undefined,
+			required: condition.required === true ? true : undefined,
 		}),
 	);
 export type RegistryCondition = z.infer<typeof registryConditionSchema>;

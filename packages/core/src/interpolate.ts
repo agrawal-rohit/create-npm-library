@@ -221,8 +221,7 @@ function interpolateString(
 }
 
 /**
- * Replace `{{key}}` placeholders in compiled item file contents and command values.
- * Targets, package names, and secrets are left literal.
+ * Replace `{{key}}` placeholders in compiled item file targets, contents, and command values.
  * @param compiledItem - Compiled item to interpolate.
  * @param values - Interpolation view.
  * @returns Payload with placeholders resolved.
@@ -232,10 +231,22 @@ export function interpolateCompiledItem(
 	compiledItem: CompiledItem,
 	values: InterpolationView,
 ): CompiledItem {
-	const files = compiledItem.files.map((file) => ({
-		...file,
-		content: interpolateString(file.content, values, `file "${file.target}"`),
-	}));
+	const files = compiledItem.files.map((file) => {
+		const content = interpolateString(
+			file.content,
+			values,
+			`file "${file.target}"`,
+		);
+		return {
+			...file,
+			target: interpolateString(
+				file.target,
+				values,
+				`file target "${file.target}"`,
+			),
+			content,
+		};
+	});
 
 	let commands = compiledItem.commands;
 	if (commands) {

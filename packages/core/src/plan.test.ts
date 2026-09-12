@@ -1222,7 +1222,7 @@ describe("core/plan", () => {
 			expect(Object.hasOwn(required, "handler")).toBe(false);
 		});
 
-		it("includes default and optional flags when declared", () => {
+		it("includes default and required flags when declared", () => {
 			const item = makeItem({
 				source: "r/item.json",
 				requires: ["authorName"],
@@ -1236,7 +1236,7 @@ describe("core/plan", () => {
 							kind: RegistryConditionKind.TEXT,
 							label: "Author",
 							default: "Ada",
-							optional: true,
+							required: true,
 						},
 					},
 					{},
@@ -1248,7 +1248,7 @@ describe("core/plan", () => {
 					kind: "text",
 					values: [],
 					default: "Ada",
-					optional: true,
+					required: true,
 				},
 			]);
 		});
@@ -2203,7 +2203,6 @@ describe("core/plan", () => {
 					coverageThreshold: {
 						kind: RegistryConditionKind.TEXT,
 						label: "Coverage",
-						optional: true,
 					},
 					qualityTools: {
 						kind: RegistryConditionKind.MULTISELECT,
@@ -2224,7 +2223,6 @@ describe("core/plan", () => {
 					label: "Coverage",
 					kind: RegistryConditionKind.TEXT,
 					values: [],
-					optional: true,
 				},
 				{
 					key: "qualityTools",

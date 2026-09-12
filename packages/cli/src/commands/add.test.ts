@@ -77,6 +77,7 @@ function makeRegistry(): Registry {
 		types: { configuration: { label: "Configurations" } },
 		conditions: {
 			language: {
+				required: true,
 				kind: RegistryConditionKind.SELECT,
 				label: "Language",
 				values: [{ value: "typescript", label: "TypeScript" }],
@@ -282,6 +283,7 @@ describe("commands/add", () => {
 			types: { configuration: { label: "Configurations" } },
 			conditions: {
 				language: {
+					required: true,
 					kind: RegistryConditionKind.SELECT,
 					label: "Language",
 					values: [
@@ -750,6 +752,7 @@ describe("commands/add", () => {
 				language: {
 					label: "Language",
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					values: [{ value: "typescript", label: "TypeScript" }],
 				},
 			},
@@ -892,15 +895,18 @@ describe("commands/add", () => {
 			conditions: {
 				authorName: {
 					kind: RegistryConditionKind.TEXT,
+					required: true,
 					label: "Author",
 					description: "Your name",
 				},
 				enableCi: {
 					kind: RegistryConditionKind.BOOLEAN,
+					required: true,
 					label: "Enable CI",
 				},
 				language: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Language",
 					values: [
 						{ value: "typescript", label: "TypeScript" },
@@ -909,6 +915,7 @@ describe("commands/add", () => {
 				},
 				platforms: {
 					kind: RegistryConditionKind.MULTISELECT,
+					required: true,
 					label: "Platforms",
 					values: [
 						{ value: "ios", label: "iOS" },
@@ -991,11 +998,13 @@ describe("commands/add", () => {
 			conditions: {
 				tags: {
 					kind: RegistryConditionKind.MULTISELECT,
+					required: true,
 					label: "Tags",
 					values: [{ value: "docs", label: "Docs" }],
 				},
 				platforms: {
 					kind: RegistryConditionKind.MULTISELECT,
+					required: true,
 					label: "Platforms",
 					handler: "r/_handlers/platforms.handler.js",
 					values: [
@@ -1005,6 +1014,7 @@ describe("commands/add", () => {
 				},
 				language: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Language",
 					handler: "r/_handlers/language.handler.js",
 					values: [
@@ -1093,11 +1103,13 @@ module.exports = {
 			conditions: {
 				authorName: {
 					kind: RegistryConditionKind.TEXT,
+					required: true,
 					label: "Author",
 					handler: "r/_handlers/authorName.handler.js",
 				},
 				enableCi: {
 					kind: RegistryConditionKind.BOOLEAN,
+					required: true,
 					label: "Enable CI",
 					handler: "r/_handlers/enableCi.handler.js",
 				},
@@ -1616,6 +1628,7 @@ module.exports = async function beforeWrite(ctx) {
 			conditions: {
 				authorName: {
 					kind: RegistryConditionKind.TEXT,
+					required: true,
 					label: "Author",
 				},
 			},
@@ -1901,6 +1914,7 @@ module.exports = async function afterInstall() {
 			conditions: {
 				defaultBranch: {
 					kind: RegistryConditionKind.TEXT,
+					required: true,
 					label: "Default branch",
 				},
 			},
@@ -2129,10 +2143,12 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						authorName: {
 							kind: RegistryConditionKind.TEXT,
+							required: true,
 							label: "Author",
 						},
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "typescript", label: "TypeScript" }],
 						},
@@ -2175,6 +2191,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "typescript", label: "TypeScript" }],
 						},
@@ -2188,6 +2205,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "javascript", label: "JavaScript" }],
 						},
@@ -2221,6 +2239,7 @@ module.exports = async function beforeWrite() {
 			conditions: {
 				language: {
 					kind: RegistryConditionKind.SELECT,
+					required: true,
 					label: "Language",
 					values: [{ value: "typescript", label: "TypeScript" }],
 				},
@@ -2234,6 +2253,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "javascript", label: "JavaScript" }],
 						},
@@ -2275,6 +2295,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [
 								{
@@ -2294,6 +2315,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [
 								{
@@ -2341,6 +2363,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "typescript", label: "TypeScript" }],
 						},
@@ -2354,6 +2377,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [
 								{
@@ -2401,6 +2425,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [
 								{
@@ -2420,6 +2445,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "typescript", label: "TypeScript" }],
 						},
@@ -2461,6 +2487,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [
 								{ value: "typescript", label: "TypeScript" },
@@ -2477,6 +2504,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: [{ value: "typescript", label: "TypeScript" }],
 						},
@@ -2519,6 +2547,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: sharedValues,
 						},
@@ -2532,6 +2561,7 @@ module.exports = async function beforeWrite() {
 					conditions: {
 						language: {
 							kind: RegistryConditionKind.SELECT,
+							required: true,
 							label: "Language",
 							values: sharedValues,
 						},

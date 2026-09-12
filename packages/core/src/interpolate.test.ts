@@ -165,7 +165,7 @@ describe("core/interpolate", () => {
 				{
 					files: [
 						{
-							target: "ci.yml",
+							target: "{{packageName}}/ci.yml",
 							content: `branch: {{defaultBranch}}\nsha: ${ghaSha}\nrun: {{pmRun}} test\n`,
 						},
 					],
@@ -173,6 +173,7 @@ describe("core/interpolate", () => {
 				},
 				{
 					defaultBranch: "main",
+					packageName: "my-package",
 					pmRun: "pnpm",
 					pmExec: "pnpm exec",
 				},
@@ -181,6 +182,7 @@ describe("core/interpolate", () => {
 			expect(payload.files[0].content).toBe(
 				`branch: main\nsha: ${ghaSha}\nrun: pnpm test\n`,
 			);
+			expect(payload.files[0].target).toBe("my-package/ci.yml");
 			expect(payload.commands).toEqual({
 				npm: { test: "pnpm exec vitest run" },
 			});

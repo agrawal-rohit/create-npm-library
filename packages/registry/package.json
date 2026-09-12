@@ -7,7 +7,7 @@
 	"scripts": {
 		"build": "pnpm --filter @tuckshop/core run build && tsx ./scripts/build-registry.ts .",
 		"typecheck": "pnpm --filter @tuckshop/core run build && tsc -p tsconfig.json --noEmit",
-		"test": "vitest run --passWithNoTests"
+		"test": "vitest run --passWithNoTests --exclude 'registry/**'"
 	},
 	"dependencies": {
 		"@tuckshop/core": "workspace:*",

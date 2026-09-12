@@ -140,6 +140,33 @@ export async function readDirectoryAsync(dirPath: string): Promise<Dirent[]> {
 }
 
 /**
+ * Recursively list every leaf path under a directory.
+ * @param dirPath - Directory root to walk.
+ * @returns Absolute paths of leaf entries, in deterministic order.
+ * @throws Error when the directory is missing or unreadable.
+ */
+export async function readDirectoryFilesAsync(
+	dirPath: string,
+): Promise<string[]> {
+	const out: string[] = [];
+	const stack: string[] = [dirPath];
+	while (stack.length > 0) {
+		const current = stack.pop() as string;
+		const entries = await fs.readdir(current, { withFileTypes: true });
+		for (const entry of entries) {
+			const absolute = path.join(current, entry.name);
+			if (entry.isDirectory()) {
+				stack.push(absolute);
+				continue;
+			}
+			out.push(absolute);
+		}
+	}
+	out.sort((left, right) => left.localeCompare(right));
+	return out;
+}
+
+/**
  * Remove a file or directory tree (missing paths are ignored).
  * @param targetPath - File or directory to remove.
  */

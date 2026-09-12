@@ -9,6 +9,7 @@
 	"conditions": {
 		"licenseId": {
 			"kind": "select",
+			"required": true,
 			"label": "SPDX license",
 			"description": "Which SPDX license should be added?",
 			"default": "MIT",
@@ -61,6 +62,7 @@
 		},
 		"copyrightYear": {
 			"kind": "text",
+			"required": true,
 			"label": "Copyright year",
 			"description": "Year used in the license copyright notice.",
 			"handler": "copyright-year.handler.ts"
