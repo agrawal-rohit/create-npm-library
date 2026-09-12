@@ -1,6 +1,7 @@
 {
 	"version": "0.2.1",
 	"name": "tuckshop-workspace",
+	"type": "module",
 	"description": "Workspace for the tuckshop CLI, core library, and default registry.",
 	"author": "Rohit Agrawal <https://github.com/agrawal-rohit>",
 	"repository": "https://github.com/agrawal-rohit/tuckshop",
@@ -19,7 +20,7 @@
 		"typecheck": "pnpm -r --filter \"./packages/*\" run typecheck && pnpm -C docs typecheck",
 		"lint": "pnpm exec biome lint --write",
 		"format": "pnpm exec biome format --write",
-		"check": "pnpm run typecheck && pnpm exec biome check --write",
+		"check": "pnpm run typecheck && pnpm exec biome check --write --no-errors-on-unmatched",
 		"cov": "pnpm --filter @tuckshop/core run build && vitest run --coverage --passWithNoTests",
 		"quality": "fallow",
 		"quality:changes": "fallow audit --format compact",

@@ -45,6 +45,20 @@
 			]
 		},
 		{
+			"id": "typescript-nub",
+			"title": "TypeScript (nub)",
+			"when": {
+				"language": "typescript",
+				"packageManager": "nub"
+			},
+			"files": [
+				{
+					"source": "typescript/.github/actions/setup/action.nub.yml",
+					"target": ".github/actions/setup/action.yml"
+				}
+			]
+		},
+		{
 			"id": "typescript-default",
 			"title": "TypeScript (npm or yarn)",
 			"when": {

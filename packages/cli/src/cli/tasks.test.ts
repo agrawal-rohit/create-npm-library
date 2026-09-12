@@ -214,7 +214,7 @@ describe("cli/tasks", () => {
 			expect(parentWork).toHaveBeenCalled();
 			expect(childWork).toHaveBeenCalled();
 			expect(parentWork.mock.invocationCallOrder[0]).toBeLessThan(
-				childWork.mock.invocationCallOrder[0]!,
+				childWork.mock.invocationCallOrder[0],
 			);
 		});
 

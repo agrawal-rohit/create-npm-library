@@ -6,6 +6,9 @@
 	"requires": [
 		"language"
 	],
+	"dependsOn": [
+		"package-management-configuration"
+	],
 	"packs": [
 		{
 			"id": "typescript",

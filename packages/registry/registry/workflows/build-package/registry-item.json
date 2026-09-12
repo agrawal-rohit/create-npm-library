@@ -8,7 +8,8 @@
 		"defaultBranch"
 	],
 	"dependsOn": [
-		"setup-workspace-workflow"
+		"setup-workspace-workflow",
+		"package-management-configuration"
 	],
 	"packs": [
 		{

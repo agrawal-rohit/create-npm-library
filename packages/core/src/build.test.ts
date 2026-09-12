@@ -442,7 +442,7 @@ describe("buildRegistry", () => {
 			"src/components/widget/sub/widget.test.tsx",
 		]);
 		expect(payload.files[0].content).toContain("Widget");
-		expect(document.items["widget"]).toEqual({
+		expect(document.items.widget).toEqual({
 			title: "Widget",
 			description: "A widget with directory-based sources.",
 			type: "component",
